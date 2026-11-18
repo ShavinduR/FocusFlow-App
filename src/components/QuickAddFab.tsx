@@ -83,7 +83,12 @@ export function QuickAddFab({ defaultCategory, onAdd }: Props) {
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={close} />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetContainer}>
+        {/* box-none: this full-screen container must let taps through to the backdrop so tapping outside closes the sheet. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.sheetContainer}
+          pointerEvents="box-none"
+        >
           <View
             style={[
               styles.sheet,

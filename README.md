@@ -63,6 +63,18 @@ The app works fully offline. When `EXPO_PUBLIC_API_URL` is set and the user is
 signed in, `useCloudSync()` syncs with the API on launch, on returning to the
 foreground, when the network comes back, and about 2 s after any local edit.
 
+### Accounts & routing
+
+- `app/(auth)/login.tsx` and `register.tsx` call `useAuthStore`, which wraps `authService`.
+- `app/_layout.tsx` uses `Stack.Protected`: signed-out users can only reach `(auth)`,
+  and signed-in users only reach `(tabs)` and `rollover`. Signing in, signing out, or the
+  server rejecting a token flips the guard, so screens never navigate manually.
+- The saved session is read from secure storage at launch (no network needed), and the splash
+  screen stays up until it is loaded, so the wrong screen never flashes.
+- With no `EXPO_PUBLIC_API_URL`, the app skips accounts entirely and runs local-only.
+- The **Account** tab shows the profile, sync status (with "Sync now"), and sign-out. Sign-out
+  asks for confirmation and warns if unsynced changes would be lost.
+
 ### Run the API
 
 ```bash
@@ -124,5 +136,3 @@ Tests: `npm test` (client engine on real SQLite with two simulated devices) and
   from `tasks`, which are synced, so insights match across devices.
 - Tombstones are kept forever. Add a TTL purge (e.g. 90 days) plus a "full resync"
   path for devices offline longer than that.
-- There is no sign-in screen yet: `src/sync/authService.ts` exposes `register`, `login`,
-  and `logout` for the UI to call.

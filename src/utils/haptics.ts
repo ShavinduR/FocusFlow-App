@@ -9,4 +9,5 @@ export const haptics = {
   light: () => enabled && Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
   medium: () => enabled && Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
   selection: () => enabled && Haptics.selectionAsync(),
+  error: () => enabled && Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
 };

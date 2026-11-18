@@ -13,26 +13,54 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { migrateDbIfNeeded } from '../src/db/migrate';
+import { useAuthStore } from '../src/store/useAuthStore';
 import { useTaskStore } from '../src/store/useTaskStore';
 import { useTheme } from '../src/theme/useTheme';
 
 SplashScreen.preventAutoHideAsync();
 
-/** Hands the opened DB to the store and waits for the first load. */
-function StoreBootstrap({ children }: { children: ReactNode }) {
+/** Hands the opened DB to the task store, restores the saved session, then reveals the app. */
+function Bootstrap({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
-  const ready = useTaskStore((s) => s.ready);
-  const init = useTaskStore((s) => s.init);
+  const tasksReady = useTaskStore((s) => s.ready);
+  const initTasks = useTaskStore((s) => s.init);
+  const authStatus = useAuthStore((s) => s.status);
+  const initAuth = useAuthStore((s) => s.init);
+  const ready = tasksReady && authStatus !== 'loading';
 
   useEffect(() => {
-    init(db);
-  }, [db, init]);
+    initTasks(db);
+    initAuth();
+  }, [db, initTasks, initAuth]);
 
   useEffect(() => {
+    // Keep the splash up until we know which stack to show: no flash of the login screen.
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
 
   return ready ? <>{children}</> : null;
+}
+
+function RootStack() {
+  const { colors } = useTheme();
+  // Re-renders on sign-in / sign-out / token expiry; Stack.Protected then redirects
+  // to the first available screen of whichever group just became allowed.
+  const canUseApp = useAuthStore((s) => s.canUseApp());
+
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+      <Stack.Protected guard={canUseApp}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="rollover"
+          options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'fade_from_bottom' }}
+        />
+      </Stack.Protected>
+      <Stack.Protected guard={!canUseApp}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
@@ -51,15 +79,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <SQLiteProvider databaseName="focusflow.db" onInit={migrateDbIfNeeded}>
-        <StoreBootstrap>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="rollover"
-              options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'fade_from_bottom' }}
-            />
-          </Stack>
-        </StoreBootstrap>
+        <Bootstrap>
+          <RootStack />
+        </Bootstrap>
       </SQLiteProvider>
     </SafeAreaProvider>
   );

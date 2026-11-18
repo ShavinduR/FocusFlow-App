@@ -6,6 +6,8 @@ interface SyncState {
   phase: SyncPhase;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /** Registered by useCloudSync so any screen can request a sync ("Sync now"). */
+  trigger: (() => void) | null;
   set: (patch: Partial<Omit<SyncState, 'set'>>) => void;
 }
 
@@ -14,5 +16,6 @@ export const useSyncStore = create<SyncState>((set) => ({
   phase: 'idle',
   lastSyncedAt: null,
   lastError: null,
+  trigger: null,
   set: (patch) => set(patch),
 }));

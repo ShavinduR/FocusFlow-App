@@ -65,7 +65,8 @@ export function useCloudSync() {
 
   useEffect(() => {
     if (!db) return;
-    run(); // launch
+    setSync({ trigger: run });
+    run(); // launch (also the first sync right after sign-in, since tabs mount then)
 
     const appSub = AppState.addEventListener('change', (state) => {
       const wasActive = active.current;
@@ -104,6 +105,7 @@ export function useCloudSync() {
       authUnsub();
       clearRetry();
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      setSync({ trigger: null });
     };
   }, [db, run, setSync]);
 

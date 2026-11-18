@@ -34,6 +34,10 @@ export default function TabsLayout() {
         name="insights"
         options={{ title: 'Insights', tabBarIcon: ({ color, size }) => <Ionicons name="pie-chart-outline" color={color as string} size={size} /> }}
       />
+      <Tabs.Screen
+        name="account"
+        options={{ title: 'Account', tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" color={color as string} size={size} /> }}
+      />
     </Tabs>
   );
 }
