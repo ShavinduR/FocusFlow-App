@@ -5,7 +5,10 @@ import { MIGRATIONS } from './schema';
 /** Passed to <SQLiteProvider onInit>. Runs pending migrations using PRAGMA user_version. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   if (Platform.OS !== 'web') await db.execAsync('PRAGMA journal_mode = WAL;');
-  await db.execAsync('PRAGMA foreign_keys = ON;');
+  // FKs must be OFF while migrations rebuild tables (SQLite's documented
+  // 12-step ALTER procedure). This PRAGMA is a no-op inside a transaction,
+  // so it is set here, outside the per-migration transactions.
+  await db.execAsync('PRAGMA foreign_keys = OFF;');
 
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let version = row?.user_version ?? 0;
@@ -18,4 +21,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version += 1;
     await db.execAsync(`PRAGMA user_version = ${version}`);
   }
+
+  await db.execAsync('PRAGMA foreign_keys = ON;');
 }

@@ -1,12 +1,14 @@
 import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useCloudSync } from '../../src/hooks/useCloudSync';
 import { useRolloverGate } from '../../src/hooks/useRolloverGate';
 import { useTheme } from '../../src/theme/useTheme';
 
 export default function TabsLayout() {
   const { colors, fonts } = useTheme();
   useRolloverGate();
+  useCloudSync();
 
   return (
     <Tabs

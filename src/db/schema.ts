@@ -62,4 +62,40 @@ export const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+
+  // v2 — cloud sync
+  //  * Drop the FK on rolled_from_id: synced tasks can arrive before their
+  //    parent (pagination, or the parent was purged), and the FK would reject them.
+  //  * sync_status gains 'error' (server permanently rejected the row; it is
+  //    retried only after the next local edit).
+  //  * Index for the "dirty rows in (updated_at, id) order" push query.
+  `
+  CREATE TABLE tasks_v2 (
+    id              TEXT PRIMARY KEY NOT NULL,
+    title           TEXT NOT NULL,
+    notes           TEXT,
+    category        TEXT NOT NULL CHECK (category IN ('must','should','could','brain_dump')),
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','completed','rolled_over','dropped')),
+    scheduled_date  TEXT,
+    sort_order      REAL NOT NULL DEFAULT 0,
+    rolled_from_id  TEXT,
+    rollover_count  INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    completed_at    TEXT,
+    deleted_at      TEXT,
+    sync_status     TEXT NOT NULL DEFAULT 'dirty' CHECK (sync_status IN ('dirty','synced','error'))
+  );
+  INSERT INTO tasks_v2 (id, title, notes, category, status, scheduled_date, sort_order, rolled_from_id,
+                        rollover_count, created_at, updated_at, completed_at, deleted_at, sync_status)
+    SELECT id, title, notes, category, status, scheduled_date, sort_order, rolled_from_id,
+           rollover_count, created_at, updated_at, completed_at, deleted_at, sync_status
+      FROM tasks;
+  DROP TABLE tasks;
+  ALTER TABLE tasks_v2 RENAME TO tasks;
+  CREATE INDEX IF NOT EXISTS idx_tasks_day      ON tasks (scheduled_date, status);
+  CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks (category, status);
+  CREATE INDEX IF NOT EXISTS idx_tasks_dirty    ON tasks (sync_status, updated_at, id);
+  `,
 ];

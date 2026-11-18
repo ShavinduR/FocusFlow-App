@@ -3,6 +3,8 @@ import { randomUUID } from 'expo-crypto';
 import { CATEGORY_ORDER_SQL } from '../../constants/categories';
 import { mapTaskRow, type CategoryId, type Task, type TaskEventType, type TaskRow } from '../../types/task';
 import { todayKey } from '../../utils/date';
+import { deterministicUuid } from '../../utils/id';
+import { notifyLocalChange } from '../../sync/localChanges';
 
 const nowIso = () => new Date().toISOString();
 
@@ -73,6 +75,7 @@ export async function createTask(
     id, input.title.trim(), input.category, scheduled, Date.now(), ts, ts,
   );
   await logEvent(db, id, 'created', input.category);
+  notifyLocalChange();
   return (await getById(db, id))!;
 }
 
@@ -83,6 +86,7 @@ export async function setTaskCompleted(db: SQLiteDatabase, task: Task, completed
     completed ? 'completed' : 'pending', completed ? ts : null, ts, task.id,
   );
   await logEvent(db, task.id, completed ? 'completed' : 'uncompleted', task.category);
+  notifyLocalChange();
 }
 
 /** Change category. Moving into a day bucket schedules it for today; into Brain Dump unschedules it. */
@@ -93,12 +97,14 @@ export async function moveTask(db: SQLiteDatabase, task: Task, category: Categor
     category, scheduled, Date.now(), nowIso(), task.id,
   );
   await logEvent(db, task.id, 'moved', category);
+  notifyLocalChange();
 }
 
 export async function softDeleteTask(db: SQLiteDatabase, task: Task) {
   const ts = nowIso();
   await db.runAsync(`UPDATE tasks SET deleted_at = ?, updated_at = ?, sync_status = 'dirty' WHERE id = ?`, ts, ts, task.id);
   await logEvent(db, task.id, 'deleted', task.category);
+  notifyLocalChange();
 }
 
 export async function markDayReviewed(db: SQLiteDatabase, date: string, migrated: number, released: number) {
@@ -132,11 +138,13 @@ export async function applyRollover(
 
       if (keep || releaseAction === 'brain_dump') {
         const category: CategoryId = keep ? task.category : 'brain_dump';
-        const cloneId = randomUUID();
+        // Deterministic: the same task rolled over on the same day gets the same id on every device.
+        const cloneId = await deterministicUuid(`rollover:${task.id}:${today}`);
         await db.runAsync(
           `INSERT INTO tasks (id, title, notes, category, status, scheduled_date, sort_order,
                               rolled_from_id, rollover_count, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING`,
           cloneId, task.title, task.notes, category, keep ? today : null, Date.now() + index,
           task.id, keep ? task.rolloverCount + 1 : task.rolloverCount, ts, ts,
         );
@@ -157,5 +165,6 @@ export async function applyRollover(
     await markDayReviewed(db, today, migrated, released);
   });
 
+  notifyLocalChange();
   return { migrated, released };
 }

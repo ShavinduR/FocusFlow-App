@@ -9,7 +9,7 @@ export type DayCategoryId = Exclude<CategoryId, 'brain_dump'>;
  * dropped     – user consciously "let it go" during the morning review
  */
 export type TaskStatus = 'pending' | 'completed' | 'rolled_over' | 'dropped';
-export type SyncStatus = 'dirty' | 'synced';
+export type SyncStatus = 'dirty' | 'synced' | 'error';
 
 export interface Task {
   id: string;

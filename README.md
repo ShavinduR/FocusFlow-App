@@ -57,12 +57,72 @@ stay true (yesterday's Must Do stays *missed*), and a task carried 4 times
 is visible as a stress signal (`rollover_count`), which feeds the
 "break it down or let it go" insight.
 
-## MERN sync roadmap
+## Cloud sync (offline-first)
 
-Already prepared in the schema: UUID ids (become `clientId` in Mongo),
-`updated_at`, `deleted_at` tombstones, and a `sync_status` dirty flag.
+The app works fully offline. When `EXPO_PUBLIC_API_URL` is set and the user is
+signed in, `useCloudSync()` syncs with the API on launch, on returning to the
+foreground, when the network comes back, and about 2 s after any local edit.
 
-1. `POST /sync/push`: send rows where `sync_status='dirty'`; server upserts by `clientId`, last-write-wins on `updatedAt`.
-2. `GET /sync/pull?since=<cursor>`: apply server changes locally; store the cursor in `settings`.
-3. Mark pushed rows `synced`. Trigger on app foreground and on reconnect (`@react-native-community/netinfo`).
-4. Mongo `tasks` collection mirrors the table (+ `userId`), with an index on `{ userId, updatedAt }`.
+### Run the API
+
+```bash
+cd server
+cp .env.example .env      # set MONGODB_URI and a long random JWT_SECRET
+npm install
+npm run dev               # http://localhost:4000
+npm test                  # integration tests (in-memory MongoDB, downloads mongod on first run)
+```
+
+Then in the app root: `cp .env.example .env` and set `EXPO_PUBLIC_API_URL`.
+On a physical phone, use your computer's LAN IP instead of `localhost`.
+
+### Endpoints
+
+| method | path | auth | body |
+|---|---|---|---|
+| POST | `/api/auth/register` | none | `{ email, password, name? }` → `{ token, user }` |
+| POST | `/api/auth/login` | none | `{ email, password }` → `{ token, user }` |
+| GET | `/api/auth/me` | Bearer | → `{ user }` |
+| POST | `/api/auth/logout-all` | Bearer | revokes every token for the user |
+| POST | `/api/sync` | Bearer | see below |
+
+### `/api/sync` protocol
+
+Request: `{ device_id, last_sync_timestamp, cursor, changes: Task[] (≤500) }`
+Response: `{ server_time, accepted[{id, updated_at}], conflicts[id], rejected[{id, reason}], changes: Task[], has_more, cursor }`
+
+- **Conflict rule: last-write-wins on the client's `updated_at`**, applied
+  atomically by MongoDB: `updateOne({ _id, user_id, updated_at: { $lt: incoming } }, …, { upsert: true })`.
+  If the server copy is the same age or newer, the upsert hits a duplicate key and the
+  push is reported as a conflict, with the winning server copy in `changes`. Ties go to the server.
+- **"What changed" uses the server clock** (`server_updated_at`), not device clocks, so a
+  phone with a wrong clock can't make the laptop miss changes. The pull re-reads a 5 s
+  overlap window to cover in-flight writes; re-applying a record is harmless.
+- Client clocks more than 5 min ahead of the server are clamped, so they can't win every conflict.
+- Pulls are paginated by `(server_updated_at, _id)` with an opaque `cursor`.
+- Deletions sync as tombstones (`deleted_at`).
+- A UUID owned by another account is rejected (`id_conflict`) and never leaked.
+
+Client (`src/sync/`):
+- `syncEngine.ts` pushes dirty rows in batches of 200, ordered by `(updated_at, id)`. In
+  one SQLite transaction per round it marks accepted rows synced (**only if not
+  edited while the request was in flight**), parks rejected rows as `error`, and
+  UPSERTs server changes with the same last-write-wins rule
+  (`ON CONFLICT DO UPDATE … WHERE excluded.updated_at >= tasks.updated_at`).
+  `last_sync_timestamp` advances only after a full successful session.
+- Rollover copies use deterministic ids (hash of task id + day), so two devices doing
+  the Morning Review offline merge instead of duplicating.
+- Sign-out wipes local data. An expired token keeps local data, and signing in again resumes.
+
+Tests: `npm test` (client engine on real SQLite with two simulated devices) and
+`cd server && npm test` (API against MongoDB).
+
+### Known limitations
+- Last-write-wins is per task, not per field. Simultaneous edits to different fields of the
+  same task keep only the later edit.
+- `task_events` (local history) and `day_reviews` are not synced. Analytics are computed
+  from `tasks`, which are synced, so insights match across devices.
+- Tombstones are kept forever. Add a TTL purge (e.g. 90 days) plus a "full resync"
+  path for devices offline longer than that.
+- There is no sign-in screen yet: `src/sync/authService.ts` exposes `register`, `login`,
+  and `logout` for the UI to call.
