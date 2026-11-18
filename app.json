@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "FocusFlow",
+    "slug": "focusflow",
+    "scheme": "focusflow",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.example.focusflow" },
+    "android": { "package": "com.example.focusflow", "edgeToEdgeEnabled": true },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": ["expo-router", "expo-sqlite", "expo-font", "expo-splash-screen"],
+    "experiments": { "typedRoutes": true }
+  }
+}
